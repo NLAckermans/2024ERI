@@ -36,10 +36,7 @@ df <- df |>
          rb_maren = (`RED- Maren` + `BLUE- Maren`)) |>
   rowwise() |>
   mutate(ERI = mean(c(rb_joy, rb_niki, rb_emma, rb_lillie, rb_maren)))
-         
-         
-#         profERI = mean(c(rb_joy, rb_niki)),
-#         studentERI = mean(c(rb_emma, rb_lillie, rb_maren)))
+
 df
   
 ```
@@ -64,25 +61,10 @@ comparing two binary factors (yes/no)
 ```{r}
 
 chisq <- chisq.test(df$headbutting, df$ERI_cat)
-
 chisq
 
-n <- sum(chisq$observed)  # Total number of observations
-nrow <- nrow(chisq$observed)  # Number of rows in contingency table
-ncol <- ncol(chisq$observed)  # Number of columns in contingency table
-
-# Calculate Cramér's V with confidence interval
-cramers_v <- chisq_to_cramers_v(
-  chisq = chisq$statistic,
-  n = n,
-  nrow = nrow,
-  ncol = ncol,
-  adjust = TRUE,
-  ci = 0.95,
-  alternative = "greater"
-)
-
-cramers_v
+# Calculate Cramer's V with confidence interval
+effectsize(chisq, adjust = TRUE)
 ```
 #t test headbutting vs endocranial roughness score
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
@@ -95,49 +77,19 @@ t.test(meanERI ~ headbutting, data = df)
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
 chisq <- chisq.test(df$CTquality, df$ERI_cat)
-
 chisq
 
-n <- sum(chisq$observed)  # Total number of observations
-nrow <- nrow(chisq$observed)  # Number of rows in contingency table
-ncol <- ncol(chisq$observed)  # Number of columns in contingency table
-
-# Calculate Cramér's V with confidence interval
-cramers_v <- chisq_to_cramers_v(
-  chisq = chisq$statistic,
-  n = n,
-  nrow = nrow,
-  ncol = ncol,
-  adjust = TRUE,
-  ci = 0.95,
-  alternative = "greater"
-)
-
-cramers_v
+# Calculate Cramer's V with confidence interval
+effectsize(chisq, adjust = TRUE)
 ```
 #Chi square test CT quality vs weight
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
 chisq <- chisq.test(df$CTquality, df$weight)
-
 chisq
 
-n <- sum(chisq$observed)  # Total number of observations
-nrow <- nrow(chisq$observed)  # Number of rows in contingency table
-ncol <- ncol(chisq$observed)  # Number of columns in contingency table
-
-# Calculate Cramér's V with confidence interval
-cramers_v <- chisq_to_cramers_v(
-  chisq = chisq$statistic,
-  n = n,
-  nrow = nrow,
-  ncol = ncol,
-  adjust = TRUE,
-  ci = 0.95,
-  alternative = "greater"
-)
-
-cramers_v
+# Calculate Cramer's V with confidence interval
+effectsize(chisq, adjust = TRUE)
 ```
 # compare within similar weight animals
 ```{r}
@@ -149,7 +101,12 @@ df_sameweight
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 comparing two binary factors (yes/no)
 ```{r}
-chisq.test(df_sameweight$headbutting, df_sameweight$ERI_cat)
+chisq <- chisq.test(df_sameweight$headbutting, df_sameweight$ERI_cat)
+chisq
+
+# Calculate Cramer's V with confidence interval
+effectsize(chisq, adjust = TRUE)
+
 ```
 
 #t test headbutting vs endocranial roughness score
@@ -162,18 +119,25 @@ t.test(meanERI ~ headbutting, data = df_sameweight)
 #Chi square test CT quality vs endocranial roughness
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-chisq.test(df_sameweight$CTquality, df_sameweight$ERI_cat)
+chisq <- chisq.test(df_sameweight$CTquality, df_sameweight$ERI_cat)
+chisq
 
+# Calculate Cramér's V with confidence interval
+effectsize(chisq, adjust = TRUE)
 ```
+
 #Chi square test CT quality vs weight
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-chisq.test(df_sameweight$CTquality, df_sameweight$weight)
+chisq <- chisq.test(df_sameweight$CTquality, df_sameweight$weight)
+chisq
+
+# Calculate Cramér's V with confidence interval
+effectsize(chisq, adjust = TRUE)
 ```
+
 # boxplots
 ```{r, fig.width = 3, fig.height = 3}
-
-
 plot1 <- df |>
   mutate(headbutting = ifelse(headbutting == "N", "non-headbutting", 
                               ifelse(headbutting == "Y", "headbutting", 
