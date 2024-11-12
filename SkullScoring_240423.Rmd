@@ -9,18 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+#last updated 12 Nov 2024
 
 #library
 ```{r}
 library(readxl) # read excel files
 library(tidyverse)
 library(ggpubr) # annotate graphs
-library(effectsize) #Chisq effect size calculation
+library(effectsize) # Chisq effect size calculation
+library(janitor) # clean names
+library(santoku) # chop quantiles
 ```
 
 #import files
 ```{r}
-df <- read_excel("Skull Scoring_Niki_240423.xlsx")
+df <- read_excel("Skull Scoring_Niki_240423_EB.xlsx")
 df
 ```
 
@@ -34,20 +37,22 @@ df <- df |>
          rb_emma = (`RED- Emma` + `BLUE- Emma`),
          rb_lillie = (`RED- Lillie` + `BLUE- Lillie`),
          rb_maren = (`RED- Maren` + `BLUE- Maren`)) |>
+  rename(voxel.size = `Voxel Size`) |>
   rowwise() |>
   mutate(ERI = mean(c(rb_joy, rb_niki, rb_emma, rb_lillie, rb_maren)))
 
 df
   
 ```
+
 #roughness categories & average when multiple individuals
 ```{r}
 df <- df |> 
   group_by(species) |>
   summarise(headbutting = first(headbutting),
-            CTquality = first(CTquality),
             weight = first(weight),
-            meanERI = mean(ERI)) |>
+            meanERI = mean(ERI),
+            meanVoxel = mean(voxel.size)) |>
   mutate(ERI_cat = case_when(meanERI >= median(meanERI) ~ "high",
                                .default = "low")) |>
   mutate(headbutting = as.factor(headbutting),
@@ -55,101 +60,371 @@ df <- df |>
 df
 
 ```
+
+#test for normal distribution
+```{r, fig.width = 8, fig.height = 4}
+
+p1 <- ggdensity(df$meanVoxel) +
+   labs(x = "mean voxel size")
+
+p2 <- ggdensity(df$weight) +
+  labs(x = "weight")
+
+p3 <- ggdensity(df$meanERI) +
+  labs(x = "mean ERI score")
+
+ggarrange(p1, p2, p3, nrow = 1)
+
+#if p > 0.05 the distribution of the data are not significantly different from 
+#normal distribution. We can assume normality
+shapiro.test(df$meanVoxel)
+shapiro.test(df$weight)
+shapiro.test(df$meanERI)
+```
+
+#test for normal distribution in the headbutting group
+```{r, fig.width = 8, fig.height = 4}
+df_hb <- df |>
+  filter(headbutting == "Y")
+
+p1 <- ggdensity(df_hb$meanVoxel) +
+   labs(x = "mean voxel size")
+
+p2 <- ggdensity(df_hb$weight) +
+  labs(x = "weight")
+
+p3 <- ggdensity(df_hb$meanERI) +
+  labs(x = "mean ERI score")
+
+ggarrange(p1, p2, p3, nrow = 1)
+
+#if p > 0.05 the distribution of the data are not significantly different from 
+#normal distribution. We can assume normality
+shapiro.test(df_hb$meanVoxel)
+shapiro.test(df_hb$weight)
+shapiro.test(df_hb$meanERI)
+```
+
+#test for normal distribution in the non-headbutting group
+```{r, fig.width = 9, fig.height = 3}
+df_nohb <- df |>
+  filter(headbutting == "N")
+
+p1 <- ggdensity(df_nohb$meanVoxel) +
+   labs(x = "mean voxel size")
+
+p2 <- ggdensity(df_nohb$weight) +
+  labs(x = "weight")
+
+p3 <- ggdensity(df_nohb$meanERI) +
+  labs(x = "mean ERI score")
+
+distribution <- ggarrange(p1, p2, p3, nrow = 1)
+distribution
+#if p > 0.05 the distribution of the data are not significantly different from 
+#normal distribution. We can assume normality
+shapiro.test(df_nohb$meanVoxel)
+shapiro.test(df_nohb$weight)
+shapiro.test(df_nohb$meanERI)
+
+#ggsave("distribution_241108.png", distribution, dpi = 300)
+```
+
+#bivariate plot CT quality vs endocranial roughness faceted by headbutting
+```{r, fig.width = 6, fig.height = 3}
+bivariate <- df |>
+  ggplot(aes(x = meanVoxel, y = meanERI)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  stat_cor(method = "spearman", label.x = 0.7, label.y = 15, cor.coef.name = "Rho") +
+  geom_text(aes(label = species), size = 2) +
+  facet_grid(cols = vars(headbutting)) +
+  labs(title = "faceted by headbutting Y/N")
+  
+bivariate
+
+#ggsave("bivariate_241108.png", bivariate, dpi = 300)
+  
+```
+
+#bivariate plot weight vs endocranial roughness
+```{r}
+df |>
+  ggplot(aes(x = weight, y = meanERI)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  stat_cor(method = "spearman", label.x = 400, label.y = 15, cor.coef.name = "Rho") +
+  geom_text(aes(label = species), size = 3) 
+```
+
 #Chi square test headbutting vs endocranial roughness
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 comparing two binary factors (yes/no)
+
+Headbutting is categorical, therefore ERI must be categorical in order to compare them
 ```{r}
 
 chisq <- chisq.test(df$headbutting, df$ERI_cat)
+
 chisq
 
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
 # Calculate Cramer's V with confidence interval
-effectsize(chisq, adjust = TRUE)
-```
-#t test headbutting vs endocranial roughness score
-If p > 0.05 we would say the two categories are independent (i.e., there is no association)
-a binary factor (yes/no) to a continuous variable (score)
-```{r}
-t.test(meanERI ~ headbutting, data = df)
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
 ```
 
-#Chi square test CT quality vs endocranial roughness
+#Chi-squared test CT quality (assessed by mean voxel size) vs endocranial roughness
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-chisq <- chisq.test(df$CTquality, df$ERI_cat)
+#make categorical
+df <- df |> 
+  mutate(voxel_cat = chop_quantiles(meanVoxel, c(0, 0.25, 0.50, 0.75),
+                                   labels = c("small", "medium", "big", "bigger"))
+         )
+
+
+#chi-squared test
+chisq <- chisq.test(df$voxel_cat, df$ERI_cat)
+
 chisq
 
-# Calculate Cramer's V with confidence interval
-effectsize(chisq, adjust = TRUE)
-```
-#Chi square test CT quality vs weight
-If p > 0.05 we would say the two categories are independent (i.e., there is no association)
-```{r}
-chisq <- chisq.test(df$CTquality, df$weight)
-chisq
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
 
 # Calculate Cramer's V with confidence interval
-effectsize(chisq, adjust = TRUE)
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
 ```
-# compare within similar weight animals
+
+#Chi square test mean Voxel vs weight
+If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-df_sameweight <- df |>
-  filter(weight > 60)
-df_sameweight
+#make categorical
+df <- df |> 
+  mutate(weight_cat = chop_quantiles(meanVoxel, c(0, 0.25, 0.50, 0.75),
+                                   labels = c("small", "medium", "big", "bigger"))
+         )
+
+chisq <- chisq.test(df$voxel_cat, df$weight_cat)
+
+chisq
+
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
+# Calculate Cramer's V with confidence interval
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
+```
+# compare within lower weight animals
+```{r}
+df_light <- df |>
+  filter(weight < 60)
+df_light
 ```
 #Chi square test headbutting vs endocranial roughness
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 comparing two binary factors (yes/no)
 ```{r}
-chisq <- chisq.test(df_sameweight$headbutting, df_sameweight$ERI_cat)
+chisq <- chisq.test(df_light$headbutting, df_light$ERI_cat)
+
 chisq
 
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
 # Calculate Cramer's V with confidence interval
-effectsize(chisq, adjust = TRUE)
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
 
-```
-
-#t test headbutting vs endocranial roughness score
-If p > 0.05 we would say the two categories are independent (i.e., there is no association)
-a binary factor (yes/no) to a continuous variable (score)
-```{r}
-t.test(meanERI ~ headbutting, data = df_sameweight)
+cramers_v
 ```
 
 #Chi square test CT quality vs endocranial roughness
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-chisq <- chisq.test(df_sameweight$CTquality, df_sameweight$ERI_cat)
+chisq <- chisq.test(df_light$voxel_cat, df_light$ERI_cat)
+
 chisq
 
-# Calculate Cramér's V with confidence interval
-effectsize(chisq, adjust = TRUE)
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
+# Calculate Cramer's V with confidence interval
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
+
+```
+# compare within heavier weight animals
+```{r}
+df_heavy <- df |>
+  filter(weight > 60)
+df_heavy
+```
+#Chi square test headbutting vs endocranial roughness
+If p > 0.05 we would say the two categories are independent (i.e., there is no association)
+comparing two binary factors (yes/no)
+```{r}
+chisq <- chisq.test(df_heavy$headbutting, df_heavy$ERI_cat)
+
+chisq
+
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
+# Calculate Cramer's V with confidence interval
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
 ```
 
+#Chi square test CT quality vs endocranial roughness
+If p > 0.05 we would say the two categories are independent (i.e., there is no association)
+```{r}
+chisq <- chisq.test(df_heavy$voxel_cat, df_heavy$ERI_cat)
+
+chisq
+
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
+# Calculate Cramer's V with confidence interval
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
+
+```
 #Chi square test CT quality vs weight
 If p > 0.05 we would say the two categories are independent (i.e., there is no association)
 ```{r}
-chisq <- chisq.test(df_sameweight$CTquality, df_sameweight$weight)
+chisq <- chisq.test(df_heavy$voxel_cat, df_heavy$weight_cat)
+
 chisq
 
-# Calculate Cramér's V with confidence interval
-effectsize(chisq, adjust = TRUE)
+n <- sum(chisq$observed)  # Total number of observations
+nrow <- nrow(chisq$observed)  # Number of rows in contingency table
+ncol <- ncol(chisq$observed)  # Number of columns in contingency table
+
+# Calculate Cramer's V with confidence interval
+cramers_v <- chisq_to_cramers_v(
+  chisq = chisq$statistic,
+  n = n,
+  nrow = nrow,
+  ncol = ncol,
+  adjust = TRUE,
+  ci = 0.95,
+  alternative = "greater"
+)
+
+cramers_v
 ```
 
-# boxplots
+#bivariate plot headbutting vs endocranial roughness at heavy vs light
+```{r, fig.width = 10, fig.height = 5}
+
+light <- df_light |>
+  ggplot(aes(x = meanVoxel, y = meanERI)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  stat_cor(method = "spearman", label.x = 0.5, label.y = 15, cor.coef.name = "Rho") +
+  geom_text(aes(label = species), size = 3) +
+  labs(title = "species < 60 kg")
+
+heavy <- df_heavy |>
+  ggplot(aes(x = meanVoxel, y = meanERI)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  stat_cor(method = "spearman", label.x = 1, label.y = 15, cor.coef.name = "Rho") +
+  geom_text(aes(label = species), size = 3) +
+  labs(title = "species > 60 kg")
+
+ggarrange(light, heavy)
+  
+```
+
+# boxplot
 ```{r, fig.width = 3, fig.height = 3}
-plot1 <- df |>
+
+df |>
   mutate(headbutting = ifelse(headbutting == "N", "non-headbutting", 
                               ifelse(headbutting == "Y", "headbutting", 
                                      headbutting))) |>
   ggplot(aes(x = headbutting, y = meanERI, fill = headbutting)) +
   geom_boxplot() +
+  geom_jitter(alpha = 0.4) +
   theme_pubclean() +
   theme(axis.title.x = element_blank(),   
         legend.position = "none") 
 
-plot1
-
-#ggsave("HbBoxplot_240723.png", plot1, dpi = 300)
+#ggsave("HbBoxplot_241107.png", plot1, dpi = 300)
 ```
 
